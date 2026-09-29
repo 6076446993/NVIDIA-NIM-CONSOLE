@@ -1,0 +1,75 @@
+{
+  "$schema": "https://raw.githubusercontent.com/6076446993/The-Crucible/main/.thecrucible.schema.json",
+  "schemaVersion": 1,
+  "project": {
+    "name": "NVIDIA NIM Console",
+    "projectId": "nvidia-nim-console",
+    "mainRepository": "6076446993/NVIDIA-NIM-CONSOLE"
+  },
+  "suite": { "mode": "all" },
+  "commands": {
+    "verify": [
+      {
+        "name": "PowerShell syntax check",
+        "run": "pwsh",
+        "args": [
+          "-NoProfile",
+          "-Command",
+          "$errors=$null; [System.Management.Automation.Language.Parser]::ParseFile('NimConsole.ps1',[ref]$null,[ref]$errors) > $null; if($errors.Count){$errors | ForEach-Object { Write-Error $_.Message }; exit 1}"
+        ],
+        "evidence": ["NimConsole.ps1"]
+      },
+      {
+        "name": "Council gate Python syntax check",
+        "run": "python",
+        "args": ["-m", "py_compile", "AIcollaborationcouncilgate.py"],
+        "evidence": ["AIcollaborationcouncilgate.py"]
+      }
+    ]
+  },
+  "artifacts": ["NimConsole.ps1", "AIcollaborationcouncilgate.py"],
+  "clutter": {
+    "allow": [],
+    "allowDuplicateContent": false,
+    "blockTrackedIgnored": true
+  },
+  "privacy": {
+    "githubIdentity": "6076446993",
+    "scanContactInformation": true
+  },
+  "security": {
+    "allow": [],
+    "allowBinaries": [],
+    "dependencyAudit": [],
+    "provenanceAudit": [],
+    "dependencyPolicy": {
+      "enabled": false,
+      "denyGit": true,
+      "denyHttp": true,
+      "denyLocal": true,
+      "allowedRegistryHosts": [],
+      "denyLicenses": []
+    }
+  },
+  "authenticity": {
+    "requireArtifacts": true,
+    "claims": []
+  },
+  "codeCheck": { "commands": [] },
+  "governance": {
+    "requireExceptionMetadata": true,
+    "failOnDisabledSecurity": true
+  },
+  "reproducibility": {
+    "enabled": false,
+    "commands": [],
+    "artifacts": []
+  },
+  "workload": {
+    "workers": 1,
+    "cycles": 1,
+    "timeoutMinutes": 5,
+    "maxOutputBytes": 1048576,
+    "execution": { "network": "allow" }
+  }
+}
