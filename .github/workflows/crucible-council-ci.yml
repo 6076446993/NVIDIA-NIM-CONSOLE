@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  console-regression:
+    name: NIM Console regression and Crucible
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -27,38 +28,6 @@ jobs:
           ref: f3217f922d2aaa88cda7873220553be2a3b6121c
           path: The-Crucible
           persist-credentials: false
-
-      - name: Require cross-repository AI Collaboration credential
-        shell: pwsh
-        env:
-          AI_COLLAB_CI_TOKEN: ${{ secrets.AI_COLLAB_CI_TOKEN }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:AI_COLLAB_CI_TOKEN)) {
-            throw "AI_COLLAB_CI_TOKEN is required to verify the private AI-collaboration- repository."
-          }
-
-      - name: Checkout AI Collaboration at verified production ref
-        uses: actions/checkout@v4
-        with:
-          repository: 6076446993/AI-collaboration-
-          ref: c935dfc05f3b1475d3d83dda9ce2a123c9c592b9
-          path: AI-collaboration-
-          token: ${{ secrets.AI_COLLAB_CI_TOKEN }}
-          persist-credentials: false
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.18.0
-          cache: npm
-          cache-dependency-path: AI-collaboration-/package-lock.json
-
-      - name: Verify AI Collaboration
-        working-directory: AI-collaboration-
-        run: |
-          npm ci
-          npm run check
-          npm audit --omit=dev --audit-level=high
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -97,3 +66,47 @@ jobs:
           node The-Crucible/src/cli.js workflow-lint
           node The-Crucible/src/cli.js security
           node The-Crucible/src/cli.js run
+
+  validate:
+    needs: console-regression:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout NIM Console
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require cross-repository AI Collaboration credential
+        shell: pwsh
+        env:
+          AI_COLLAB_CI_TOKEN: ${{ secrets.AI_COLLAB_CI_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:AI_COLLAB_CI_TOKEN)) {
+            throw "AI_COLLAB_CI_TOKEN is required to verify the private AI-collaboration- repository."
+          }
+
+      - name: Checkout AI Collaboration at verified production ref
+        uses: actions/checkout@v4
+        with:
+          repository: 6076446993/AI-collaboration-
+          ref: c935dfc05f3b1475d3d83dda9ce2a123c9c592b9
+          path: AI-collaboration-
+          token: ${{ secrets.AI_COLLAB_CI_TOKEN }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+          cache-dependency-path: AI-collaboration-/package-lock.json
+
+      - name: Verify AI Collaboration
+        working-directory: AI-collaboration-
+        run: |
+          npm ci
+          npm run check
+          npm audit --omit=dev --audit-level=high
+
