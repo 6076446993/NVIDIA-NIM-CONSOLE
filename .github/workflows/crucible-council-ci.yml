@@ -1,4 +1,4 @@
-﻿name: Crucible & AI Council Gate
+name: Crucible & AI Collaboration Gate
 
 on:
   push:
@@ -6,50 +6,94 @@ on:
   pull_request:
     branches: [ main, master ]
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
-      - name: Checkout Nim Repository
+      - name: Checkout NIM Console
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Checkout The Crucible
+      - name: Checkout The Crucible at verified production ref
         uses: actions/checkout@v4
         with:
           repository: 6076446993/The-Crucible
+          ref: f3217f922d2aaa88cda7873220553be2a3b6121c
           path: The-Crucible
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
-      - name: Checkout AI-collaboration
+      - name: Require cross-repository AI Collaboration credential
+        shell: pwsh
+        env:
+          AI_COLLAB_CI_TOKEN: ${{ secrets.AI_COLLAB_CI_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:AI_COLLAB_CI_TOKEN)) {
+            throw "AI_COLLAB_CI_TOKEN is required to verify the private AI-collaboration- repository."
+          }
+
+      - name: Checkout AI Collaboration at verified production ref
         uses: actions/checkout@v4
         with:
           repository: 6076446993/AI-collaboration-
+          ref: c935dfc05f3b1475d3d83dda9ce2a123c9c592b9
           path: AI-collaboration-
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.AI_COLLAB_CI_TOKEN }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+          cache-dependency-path: AI-collaboration-/package-lock.json
+
+      - name: Verify AI Collaboration
+        working-directory: AI-collaboration-
+        run: |
+          npm ci
+          npm run check
+          npm audit --omit=dev --audit-level=high
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install Dependencies
-        run: |
-          pip install -r requirements.txt
+      - name: Install NIM Console Python dependencies
+        run: python -m pip install -r requirements.txt
 
-      - name: Run The Crucible Verification Gate
+      - name: Verify NIM Console PowerShell syntax
         shell: pwsh
         run: |
-          if (Test-Path "./The-Crucible/scripts/crucible-gate.ps1") {
-              ./The-Crucible/scripts/crucible-gate.ps1 -Target "NIM-Console" -StrictMemoryCheck
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD "NimConsole.ps1"),
+            [ref]$tokens,
+            [ref]$errors
+          ) > $null
+          if ($errors.Count) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
           }
 
-      - name: Run AI Council Review
+      - name: Verify council adapter Python syntax
+        run: python -m py_compile AIcollaborationcouncilgate.py
+
+      - name: Run The Crucible against NIM Console
+        shell: pwsh
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          NIM_API_KEY: ${{ secrets.NIM_API_KEY }}
+          CRUCIBLE_PROJECT_ROOT: ${{ github.workspace }}
+          CRUCIBLE_CONFIG: .thecrucible.json
+          CRUCIBLE_COMMIT_REF: ${{ github.sha }}
         run: |
-          git diff HEAD~1 | python ./council_gate.py
+          node The-Crucible/src/cli.js validate
+          node The-Crucible/src/cli.js workflow-lint
+          node The-Crucible/src/cli.js security
+          node The-Crucible/src/cli.js run
