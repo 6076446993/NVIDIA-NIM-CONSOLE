@@ -1,35 +1,3 @@
-﻿import os
-import sys
-import json
-import asyncio
-from typing import Dict, Any
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-NIM_API_KEY = os.getenv("NIM_API_KEY") or os.getenv("NGC_API_KEY")
-NIM_BASE_URL = os.getenv("NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
-
-SYSTEM_PROMPT = """You are a strict voting member of the AI Collaboration Council.
-Your task is to inspect the submitted git diff and context for:
-1. Syntax correctness and breaking logic.
-2. In-memory continuation-resolution schema compliance.
-3. Obvious bugs, security vulnerabilities, or regression risks.
-
-You MUST reply ONLY with valid JSON in this exact structure:
-{"vote": "APPROVE" | "REJECT", "reason": "<Concise 1-2 sentence explanation>"}"""
-
-def parse_vote_response(raw_text: str, provider: str) -> Dict[str, Any]:
-    try:
-        cleaned = raw_text.strip()
-        if "```json" in cleaned:
-            cleaned = cleaned.split("```json")[1].split("```")[0].strip()
-        elif "```" in cleaned:
-            cleaned = cleaned.split("
-Set-Location -Path "C:\Users\jonat\Desktop\Software\NVIDIA-NIM-CONSOLE"
-
-# 1. requirements.txt
-@'
 google-genai>=0.1.0
 anthropic>=0.20.0
 openai>=1.15.0
