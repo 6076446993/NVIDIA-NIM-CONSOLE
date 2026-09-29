@@ -18,14 +18,14 @@ jobs:
       - name: Checkout The Crucible
         uses: actions/checkout@v4
         with:
-          repository: jonathanblunt1214-lgtm/The-Crucible
+          repository: 6076446993/The-Crucible
           path: The-Crucible
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Checkout AI-collaboration
         uses: actions/checkout@v4
         with:
-          repository: jonathanblunt1214-lgtm/AI-collaboration-
+          repository: 6076446993/AI-collaboration-
           path: AI-collaboration-
           token: ${{ secrets.GITHUB_TOKEN }}
 
