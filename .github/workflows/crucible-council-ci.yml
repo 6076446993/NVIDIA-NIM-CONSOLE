@@ -68,7 +68,7 @@ jobs:
           node The-Crucible/src/cli.js run
 
   validate:
-    needs: console-regression:
+    needs: console-regression
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
