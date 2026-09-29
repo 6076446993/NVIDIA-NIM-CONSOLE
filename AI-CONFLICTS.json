@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "precedence": [
+      "owner explicit instruction",
+      "repository governance",
+      "verified execution evidence",
+      "provider/council recommendation"
+    ],
+    "resolution": "Unresolved conflicts block claims of verified completion. Council consensus never overrides Crucible verification."
+  },
+  "conflicts": []
+}
