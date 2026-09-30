@@ -26,11 +26,19 @@ jobs:
         run: |
           $tokens = $null
           $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path './NimConsole.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Error $_.Message }
-            exit 1
+          foreach ($script in @('./NimConsole.ps1', './NexusCodingWorkflow.ps1', './tests/NexusCodingWorkflowRegression.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error ($script + ': ' + $_.Message) }
+              exit 1
+            }
           }
+      - name: Run coding workflow lineage regression
+        shell: pwsh
+        run: ./tests/NexusCodingWorkflowRegression.ps1
+
       - name: Verify Python helper and requirements
         shell: pwsh
         run: |
