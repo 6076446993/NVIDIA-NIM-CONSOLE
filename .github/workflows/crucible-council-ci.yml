@@ -1,4 +1,4 @@
-name: Crucible & AI Collaboration Gate
+name: Crucible & AI Council Gate
 
 on:
   push:
@@ -8,105 +8,98 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: read
 
 jobs:
-  console-regression:
-    name: NIM Console regression and Crucible
-    runs-on: windows-latest
-    timeout-minutes: 20
+  crucible:
+    name: The Crucible
+    uses: 6076446993/The-Crucible/.github/workflows/the-crucible.yml@f3217f922d2aaa88cda7873220553be2a3b6121c
+    with:
+      core_ref: f3217f922d2aaa88cda7873220553be2a3b6121c
+      config_path: .thecrucible.json
+      run_workload: true
+      weekly_maintenance: false
+      dependency_review: false
+
+  council:
+    name: AI Collaboration Council
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - name: Checkout NIM Console
-        uses: actions/checkout@v4
+      - name: Check out exact console revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          fetch-depth: 0
+          fetch-depth: 2
           persist-credentials: false
 
-      - name: Checkout The Crucible at verified production ref
-        uses: actions/checkout@v4
-        with:
-          repository: 6076446993/The-Crucible
-          ref: f3217f922d2aaa88cda7873220553be2a3b6121c
-          path: The-Crucible
-          persist-credentials: false
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install NIM Console Python dependencies
-        run: python -m pip install -r requirements.txt
-
-      - name: Verify NIM Console PowerShell syntax
-        shell: pwsh
+      - name: Build bounded review diff
+        shell: bash
         run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            (Join-Path $PWD "NimConsole.ps1"),
-            [ref]$tokens,
-            [ref]$errors
-          ) > $null
-          if ($errors.Count) {
-            $errors | ForEach-Object { Write-Error $_.Message }
-            exit 1
-          }
+          set -euo pipefail
+          if git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --no-ext-diff --unified=3 HEAD^ HEAD | head -c 12000 > council-diff.txt
+          else
+            git show --format= --no-ext-diff --unified=3 HEAD | head -c 12000 > council-diff.txt
+          fi
 
-      - name: Verify council adapter Python syntax
-        run: python -m py_compile AIcollaborationcouncilgate.py
-
-      - name: Run The Crucible against NIM Console
-        shell: pwsh
+      - name: Require deployed AI Collaboration boundary
         env:
-          CRUCIBLE_PROJECT_ROOT: ${{ github.workspace }}
-          CRUCIBLE_CONFIG: .thecrucible.json
-          CRUCIBLE_COMMIT_REF: ${{ github.sha }}
+          AI_COLLABORATION_BASE_URL: ${{ vars.AI_COLLABORATION_BASE_URL }}
+          AI_COLLABORATION_BEARER_TOKEN: ${{ secrets.AI_COLLABORATION_BEARER_TOKEN }}
+        shell: bash
         run: |
-          node The-Crucible/src/cli.js validate
-          node The-Crucible/src/cli.js workflow-lint
-          node The-Crucible/src/cli.js security
-          node The-Crucible/src/cli.js run
+          set -euo pipefail
+          test -n "$AI_COLLABORATION_BASE_URL"
+          test -n "$AI_COLLABORATION_BEARER_TOKEN"
 
-  validate:
-    needs: console-regression
-    runs-on: windows-latest
-    timeout-minutes: 20
+      - name: Request governed council review
+        env:
+          AI_COLLABORATION_BASE_URL: ${{ vars.AI_COLLABORATION_BASE_URL }}
+          AI_COLLABORATION_BEARER_TOKEN: ${{ secrets.AI_COLLABORATION_BEARER_TOKEN }}
+        shell: python
+        run: |
+          import json, os, pathlib, urllib.request
+          base = os.environ["AI_COLLABORATION_BASE_URL"].rstrip("/")
+          token = os.environ["AI_COLLABORATION_BEARER_TOKEN"]
+          diff = pathlib.Path("council-diff.txt").read_text(encoding="utf-8", errors="replace")
+          body = json.dumps({
+              "model": "nexus-review",
+              "messages": [
+                  {"role": "system", "content": "Review this code change for syntax, security, regression risk, and Nexus contract violations. Return a concise review. Council output is advisory and grants no execution authorization."},
+                  {"role": "user", "content": diff or "(empty diff)"}
+              ],
+              "temperature": 0.1
+          }).encode()
+          request = urllib.request.Request(
+              base + "/v1/chat/completions",
+              data=body,
+              headers={
+                  "Authorization": "Bearer " + token,
+                  "Content-Type": "application/json"
+              },
+              method="POST"
+          )
+          with urllib.request.urlopen(request, timeout=90) as response:
+              result = json.load(response)
+          content = result["choices"][0]["message"]["content"]
+          metadata = result.get("ai_collaboration", {})
+          if metadata.get("authorizationGranted") is True:
+              raise SystemExit("AI Collaboration must never grant execution authorization.")
+          print(content)
+          print("Council review completed; Crucible remains the verification authority.")
+
+  gate:
+    name: Crucible & AI Council Gate
+    needs: [crucible, council]
+    if: always()
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout NIM Console
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Require cross-repository AI Collaboration credential
-        shell: pwsh
-        env:
-          AI_COLLAB_CI_TOKEN: ${{ secrets.AI_COLLAB_CI_TOKEN }}
+      - name: Enforce both independent results
+        shell: bash
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:AI_COLLAB_CI_TOKEN)) {
-            throw "AI_COLLAB_CI_TOKEN is required to verify the private AI-collaboration- repository."
-          }
-
-      - name: Checkout AI Collaboration at verified production ref
-        uses: actions/checkout@v4
-        with:
-          repository: 6076446993/AI-collaboration-
-          ref: c935dfc05f3b1475d3d83dda9ce2a123c9c592b9
-          path: AI-collaboration-
-          token: ${{ secrets.AI_COLLAB_CI_TOKEN }}
-          persist-credentials: false
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.18.0
-          cache: npm
-          cache-dependency-path: AI-collaboration-/package-lock.json
-
-      - name: Verify AI Collaboration
-        working-directory: AI-collaboration-
-        run: |
-          npm ci
-          npm run check
-          npm audit --omit=dev --audit-level=high
-
+          set -euo pipefail
+          echo "Crucible: ${{ needs.crucible.result }}"
+          echo "Council:  ${{ needs.council.result }}"
+          test "${{ needs.crucible.result }}" = success
+          test "${{ needs.council.result }}" = success
