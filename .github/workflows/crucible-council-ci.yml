@@ -12,6 +12,35 @@ permissions:
   pull-requests: read
 
 jobs:
+  regression:
+    name: Console regression
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact console revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Verify PowerShell console parses
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path './NimConsole.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+      - name: Verify Python helper and requirements
+        shell: pwsh
+        run: |
+          python -m py_compile AIcollaborationcouncilgate.py
+          $requirements = Get-Content requirements.txt | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') }
+          if ($requirements.Count -lt 4) { throw 'requirements.txt is incomplete.' }
+          if ((Get-Content requirements.txt -Raw) -match '(^|\n)\s*(import|from|Set-Location)\s') {
+            throw 'requirements.txt contains executable source instead of dependency declarations.'
+          }
+
   crucible:
     name: The Crucible
     uses: 6076446993/The-Crucible/.github/workflows/the-crucible.yml@f3217f922d2aaa88cda7873220553be2a3b6121c
@@ -91,7 +120,7 @@ jobs:
 
   gate:
     name: Crucible & AI Council Gate
-    needs: [crucible, council]
+    needs: [regression, crucible, council]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -99,7 +128,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Crucible: ${{ needs.crucible.result }}"
-          echo "Council:  ${{ needs.council.result }}"
+          echo "Regression: ${{ needs.regression.result }}"
+          echo "Crucible:   ${{ needs.crucible.result }}"
+          echo "Council:    ${{ needs.council.result }}"
+          test "${{ needs.regression.result }}" = success
           test "${{ needs.crucible.result }}" = success
           test "${{ needs.council.result }}" = success
