@@ -21,7 +21,7 @@ function Get-NexusWorkflowRoot {
     if ([string]::IsNullOrWhiteSpace($override)) {
         $base = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
         if ([string]::IsNullOrWhiteSpace($base)) {
-            $base = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile) '.nexus-nim'
+            $base = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)) '.nexus-nim'
         } else {
             $base = Join-Path $base 'NexusNim'
         }
