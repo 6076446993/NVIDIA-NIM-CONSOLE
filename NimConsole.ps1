@@ -1,6 +1,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'NexusCodingWorkflow.ps1')
+
 function Get-EnvironmentValue {
     param([Parameter(Mandatory=$true)][string]$Name)
     $value = [Environment]::GetEnvironmentVariable($Name, 'Process')
@@ -98,7 +100,7 @@ function Render-Banner {
     Write-Host ('Branch       : ' + $branch)
     Write-Host ('Route        : ' + $route)
     Write-Host 'Verification : AI output is UNVERIFIED until the repository Crucible gate passes.' -ForegroundColor Yellow
-    Write-Host 'Commands     : :branch, :sync, clear, exit'
+    Write-Host 'Commands     : :code <task>, :verify [workflow-id], :status, :branch, :sync, clear, exit'
     Write-Host ''
 }
 
@@ -113,6 +115,45 @@ while ($true) {
     if ($userInput -in @('exit', ':q')) { break }
     if ($userInput -eq 'clear') { $messages.Clear(); $messages.Add([ordered]@{ role = 'system'; content = $systemPrompt }); Render-Banner; continue }
     if ($userInput -eq ':branch') { Select-GitHubBranch; Render-Banner; continue }
+    if ($userInput -like ':code *') {
+        $task = $userInput.Substring(6).Trim()
+        if ([string]::IsNullOrWhiteSpace($task)) { Write-Host '[BLOCKED] :code requires a coding task.' -ForegroundColor Red; continue }
+        try {
+            $execution = Invoke-NexusCodingTask -TaskDescription $task
+            Write-Host ('[EXECUTED][UNVERIFIED] Applied CodingProposal. Workflow: ' + $execution.record.workflowId) -ForegroundColor Yellow
+            Write-Host ('Record: ' + $execution.recordFile) -ForegroundColor DarkGray
+            Write-Host 'Review the diff, commit/push it, then run :verify to consume the exact Crucible report.' -ForegroundColor Yellow
+        } catch {
+            Write-Host ('[BLOCKED] ' + $_.Exception.Message) -ForegroundColor Red
+        }
+        continue
+    }
+
+    if ($userInput -like ':verify*') {
+        $workflowId = $userInput.Substring(7).Trim()
+        try {
+            $verified = Confirm-NexusWorkflowVerification -WorkflowId $workflowId
+            Write-Host ('[VERIFIED] Crucible evidence consumed for ' + $verified.verificationReceipt.targetVersion) -ForegroundColor Green
+            Write-Host ('Run: ' + $verified.verificationReceipt.workflowRunId + ' | Artifact: ' + $verified.verificationReceipt.artifactName) -ForegroundColor DarkGray
+        } catch {
+            Write-Host ('[UNVERIFIED] ' + $_.Exception.Message) -ForegroundColor Yellow
+        }
+        continue
+    }
+
+    if ($userInput -eq ':status') {
+        $workflowRoot = Get-NexusWorkflowRoot
+        $latest = Get-ChildItem -LiteralPath $workflowRoot -Filter 'workflow-*.json' -File | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+        if (-not $latest) { Write-Host 'No coding workflow has been recorded.' -ForegroundColor DarkGray }
+        else {
+            $state = Get-Content -LiteralPath $latest.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            Write-Host ('Workflow: ' + $state.workflowId)
+            Write-Host ('State: ' + $state.workflowState + ' | Completion: ' + $state.completionStatus)
+            Write-Host ('Target: ' + $state.repositoryReference + '@' + $state.targetVersion)
+        }
+        continue
+    }
+
     if ($userInput -eq ':sync') {
         $current = git branch --show-current 2>$null
         if ([string]::IsNullOrWhiteSpace($current)) { Write-Host 'Cannot sync a detached HEAD.' -ForegroundColor Red; continue }
