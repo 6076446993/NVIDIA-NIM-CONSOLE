@@ -1,5 +1,12 @@
 Set-StrictMode -Version Latest
 
+function Get-NexusStringSha256 {
+    param([Parameter(Mandatory=$true)][string]$Value)
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
+    $hash = [System.Security.Cryptography.SHA256]::HashData($bytes)
+    return ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
+}
+
 function Get-NexusRepositoryReference {
     $remote = (git config --get remote.origin.url 2>$null)
     if ([string]::IsNullOrWhiteSpace($remote)) { throw 'Git remote origin is required.' }
@@ -159,6 +166,12 @@ function Invoke-NexusCodingTask {
             Remove-Item -LiteralPath $patch -Force -ErrorAction SilentlyContinue
         }
 
+        $executionDiff = (& git diff --binary $targetVersion)
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($executionDiff -join [Environment]::NewLine))) {
+            throw 'CodingProposal produced no auditable working-tree diff.'
+        }
+        $record.executedPaths = @(& git diff --name-only $targetVersion)
+        $record.executedDiffSha256 = Get-NexusStringSha256 (($executionDiff -join [Environment]::NewLine) + [Environment]::NewLine)
         $record.workflowState = 'EXECUTED'
         $record.completionStatus = 'UNVERIFIED'
         $record.executedAt = (Get-Date).ToUniversalTime().ToString('o')
@@ -176,13 +189,23 @@ function Invoke-NexusCodingTask {
 }
 
 function Get-CrucibleVerificationReceipt {
-    param([string]$WorkflowId)
+    param(
+        [string]$WorkflowId,
+        [Parameter(Mandatory=$true)][string]$RecordTargetVersion,
+        [Parameter(Mandatory=$true)][string]$ExpectedDiffSha256
+    )
 
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required to consume hosted Crucible evidence.' }
     if (@(git status --porcelain).Count -gt 0) { throw 'Verification requires a clean committed working tree. Commit the executed change before requesting hosted verification evidence.' }
 
     $repository = Get-NexusRepositoryReference
     $head = (git rev-parse HEAD).Trim()
+    & git merge-base --is-ancestor $recordTargetVersion $head 2>$null
+    if ($LASTEXITCODE -ne 0) { throw 'Current HEAD does not descend from the CodingProposal target version.' }
+    $committedDiff = (& git diff --binary $recordTargetVersion $head)
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to reconstruct the committed coding diff for verification.' }
+    $committedDiffSha256 = Get-NexusStringSha256 (($committedDiff -join [Environment]::NewLine) + [Environment]::NewLine)
+    if ($committedDiffSha256 -ne $expectedDiffSha256) { throw 'Current committed diff does not match the executed CodingProposal lineage.' }
     $runs = (gh api ('repos/' + $repository + '/actions/runs?head_sha=' + $head + '&per_page=50') | ConvertFrom-Json).workflow_runs
     $successful = @($runs | Where-Object { $_.conclusion -eq 'success' } | Sort-Object {[datetime]$_.updated_at} -Descending)
     if ($successful.Count -eq 0) { throw 'No successful GitHub Actions run exists for the current HEAD.' }
@@ -245,7 +268,8 @@ function Confirm-NexusWorkflowVerification {
     if (-not $file) { throw 'No Nexus NIM workflow record is available to verify.' }
 
     $record = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
-    $receipt = Get-CrucibleVerificationReceipt -WorkflowId $record.workflowId
+    if ([string]::IsNullOrWhiteSpace([string]$record.executedDiffSha256)) { throw 'Workflow record predates executable diff lineage and cannot be promoted to VERIFIED.' }
+    $receipt = Get-CrucibleVerificationReceipt -WorkflowId $record.workflowId -RecordTargetVersion $record.targetVersion -ExpectedDiffSha256 $record.executedDiffSha256
     if ($receipt.repositoryReference -ne $record.repositoryReference) { throw 'Crucible receipt repository does not match the workflow repository.' }
 
     $record.verificationReceipt = $receipt
