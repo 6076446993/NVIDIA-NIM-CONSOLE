@@ -1,2 +1,4 @@
 .env
 .env.txt
+.nexus-nim/
+.nim_session_state.json
