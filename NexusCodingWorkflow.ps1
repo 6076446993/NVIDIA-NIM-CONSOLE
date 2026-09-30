@@ -17,8 +17,21 @@ function Get-NexusRepositoryReference {
 }
 
 function Get-NexusWorkflowRoot {
-    $root = Join-Path (Get-Location).Path '.nexus-nim'
-    if (-not (Test-Path -LiteralPath $root)) { New-Item -ItemType Directory -Path $root | Out-Null }
+    $override = [Environment]::GetEnvironmentVariable('NEXUS_WORKFLOW_STATE_ROOT', 'Process')
+    if ([string]::IsNullOrWhiteSpace($override)) {
+        $base = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+        if ([string]::IsNullOrWhiteSpace($base)) {
+            $base = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile) '.nexus-nim'
+        } else {
+            $base = Join-Path $base 'NexusNim'
+        }
+    } else {
+        $base = $override
+    }
+    $repository = try { Get-NexusRepositoryReference } catch { 'unbound-repository' }
+    $safeRepository = $repository -replace '[^A-Za-z0-9_.-]', '_'
+    $root = Join-Path (Join-Path $base 'workflows') $safeRepository
+    if (-not (Test-Path -LiteralPath $root)) { New-Item -ItemType Directory -Path $root -Force | Out-Null }
     return $root
 }
 
