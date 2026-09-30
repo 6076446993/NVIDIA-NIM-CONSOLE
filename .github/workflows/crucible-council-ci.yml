@@ -82,7 +82,7 @@ jobs:
 
       - name: Require deployed AI Collaboration boundary
         env:
-          AI_COLLABORATION_BASE_URL: ${{ vars.AI_COLLABORATION_BASE_URL }}
+          AI_COLLABORATION_BASE_URL: https://ai-collaboration-bwkm.onrender.com
           AI_COLLABORATION_BEARER_TOKEN: ${{ secrets.AI_COLLABORATION_BEARER_TOKEN }}
         shell: bash
         run: |
@@ -92,7 +92,7 @@ jobs:
 
       - name: Request governed council review
         env:
-          AI_COLLABORATION_BASE_URL: ${{ vars.AI_COLLABORATION_BASE_URL }}
+          AI_COLLABORATION_BASE_URL: https://ai-collaboration-bwkm.onrender.com
           AI_COLLABORATION_BEARER_TOKEN: ${{ secrets.AI_COLLABORATION_BEARER_TOKEN }}
         shell: python
         run: |
