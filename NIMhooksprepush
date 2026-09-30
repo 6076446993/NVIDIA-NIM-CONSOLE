@@ -1,27 +1,20 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 echo "=================================================="
-echo "    NVIDIA NIM CONSOLE: PRE-PUSH RELEASE GATE     "
+echo "    NVIDIA NIM CONSOLE: PRE-PUSH SAFETY CHECK     "
 echo "=================================================="
 
-# 1. Crucible Verification Gate Check
-if [ -f "./The-Crucible/scripts/crucible-gate.ps1" ]; then
-    powershell.exe -ExecutionPolicy Bypass -File "./The-Crucible/scripts/crucible-gate.ps1" -Target "NIM-Console" -StrictMemoryCheck
-elif [ -d "../The-Crucible" ]; then
-    powershell.exe -ExecutionPolicy Bypass -File "../The-Crucible/scripts/crucible-gate.ps1" -Target "NIM-Console" -StrictMemoryCheck
+if command -v pwsh >/dev/null 2>&1; then
+  pwsh -NoProfile -Command "\$errors=\$null; [System.Management.Automation.Language.Parser]::ParseFile('NimConsole.ps1',[ref]\$null,[ref]\$errors) | Out-Null; if(\$errors.Count){\$errors | ForEach-Object { Write-Error \$_.Message }; exit 1}"
+elif command -v powershell.exe >/dev/null 2>&1; then
+  powershell.exe -NoProfile -Command "\$errors=\$null; [System.Management.Automation.Language.Parser]::ParseFile('NimConsole.ps1',[ref]\$null,[ref]\$errors) | Out-Null; if(\$errors.Count){\$errors | ForEach-Object { Write-Error \$_.Message }; exit 1}"
 else
-    echo "[Crucible] Directory not mounted locally. Proceeding to Council."
+  echo "[BLOCKED] PowerShell is required to parse NimConsole.ps1 before push." >&2
+  exit 1
 fi
 
-# 2. AI Collaboration Council Review
-DIFF_CONTENT=$(git diff origin/main...HEAD 2>/dev/null || git diff HEAD~1 2>/dev/null || echo "")
+python -m py_compile AIcollaborationcouncilgate.py
 
-if [ -f "./council_gate.py" ]; then
-    echo "$DIFF_CONTENT" | python3 ./council_gate.py
-elif [ -f "../AI-collaboration-/council_gate.py" ]; then
-    echo "$DIFF_CONTENT" | python3 "../AI-collaboration-/council_gate.py"
-fi
-
-echo "All checks satisfied. Proceeding with push."
-exit 0
+echo "Local syntax checks passed."
+echo "Push is still UNVERIFIED until GitHub's Crucible & AI Council Gate succeeds."
