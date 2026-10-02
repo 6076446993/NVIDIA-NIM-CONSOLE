@@ -33,15 +33,14 @@ try {
 
     function Invoke-NexusCodingProposal {
         param([string]$TaskDescription,[string]$TaskReference,[string]$LineageReference,[string]$RepositoryReference,[string]$TargetVersion)
-        $diffLines = @(
-            'diff --git a/a.txt b/a.txt',
-            '--- a/a.txt',
-            '+++ b/a.txt',
-            '@@ -1 +1 @@',
-            '-old',
-            '+new'
-        )
-        $diff = ($diffLines -join [Environment]::NewLine) + [Environment]::NewLine
+        Set-Content -LiteralPath 'a.txt' -Value 'new' -NoNewline
+        try {
+            $diff = ((& git diff --binary -- a.txt) -join [Environment]::NewLine) + [Environment]::NewLine
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($diff)) { throw 'Fixture failed to generate a Git-applicable proposal diff.' }
+        } finally {
+            & git checkout -- a.txt
+            if ($LASTEXITCODE -ne 0) { throw 'Fixture failed to restore a.txt after generating the proposal diff.' }
+        }
         return [pscustomobject]@{
             codingProposal = [pscustomobject]@{
                 schemaVersion = 1
