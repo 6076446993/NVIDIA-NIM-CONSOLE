@@ -59,7 +59,7 @@ try {
     }
 
     $execution = Invoke-NexusCodingTask -TaskDescription 'change a.txt from old to new'
-    Assert-True ((Get-Content -LiteralPath a.txt -Raw) -eq 'new') 'CodingProposal must be applied to the working tree.'
+    Assert-True (@(Get-Content -LiteralPath a.txt).Count -eq 1 -and (Get-Content -LiteralPath a.txt) -eq 'new') 'CodingProposal must be applied to the working tree.'
     Assert-True ($execution.record.workflowState -eq 'EXECUTED') 'Applied proposal must enter EXECUTED.'
     Assert-True ($execution.record.completionStatus -eq 'UNVERIFIED') 'Applied proposal must remain UNVERIFIED.'
     Assert-True ($execution.record.targetVersion -eq $base) 'Workflow must retain the exact proposal target version.'
