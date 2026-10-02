@@ -21,7 +21,7 @@ try {
     git config user.email 'nexus-test@example.invalid'
     git config user.name 'Nexus Test'
     git remote add origin 'https://github.com/6076446993/example.git'
-    Set-Content -LiteralPath 'a.txt' -Value 'old' -NoNewline
+    Set-Content -LiteralPath 'a.txt' -Value 'old'
     Set-Content -LiteralPath '.env' -Value 'SHOULD_NOT_LEAVE_CONTEXT' -NoNewline
     git add a.txt .env
     git commit -qm 'fixture'
@@ -33,16 +33,14 @@ try {
 
     function Invoke-NexusCodingProposal {
         param([string]$TaskDescription,[string]$TaskReference,[string]$LineageReference,[string]$RepositoryReference,[string]$TargetVersion)
-        $diffLines = @(
-            'diff --git a/a.txt b/a.txt',
-            'index 3367afd..3e75765 100644',
-            '--- a/a.txt',
-            '+++ b/a.txt',
-            '@@ -1 +1 @@',
-            '-old',
-            '+new'
-        )
-        $diff = ($diffLines -join [Environment]::NewLine) + [Environment]::NewLine
+        Set-Content -LiteralPath 'a.txt' -Value 'new'
+        try {
+            $diff = ((& git diff --binary -- a.txt) -join [Environment]::NewLine) + [Environment]::NewLine
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($diff)) { throw 'Fixture failed to generate a Git-applicable proposal diff.' }
+        } finally {
+            & git checkout -- a.txt
+            if ($LASTEXITCODE -ne 0) { throw 'Fixture failed to restore a.txt after generating the proposal diff.' }
+        }
         return [pscustomobject]@{
             codingProposal = [pscustomobject]@{
                 schemaVersion = 1
@@ -61,7 +59,7 @@ try {
     }
 
     $execution = Invoke-NexusCodingTask -TaskDescription 'change a.txt from old to new'
-    Assert-True ((Get-Content -LiteralPath a.txt -Raw) -eq 'new') 'CodingProposal must be applied to the working tree.'
+    Assert-True (@(Get-Content -LiteralPath a.txt).Count -eq 1 -and (Get-Content -LiteralPath a.txt) -eq 'new') 'CodingProposal must be applied to the working tree.'
     Assert-True ($execution.record.workflowState -eq 'EXECUTED') 'Applied proposal must enter EXECUTED.'
     Assert-True ($execution.record.completionStatus -eq 'UNVERIFIED') 'Applied proposal must remain UNVERIFIED.'
     Assert-True ($execution.record.targetVersion -eq $base) 'Workflow must retain the exact proposal target version.'
