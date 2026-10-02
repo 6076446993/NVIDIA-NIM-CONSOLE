@@ -21,7 +21,7 @@ try {
     git config user.email 'nexus-test@example.invalid'
     git config user.name 'Nexus Test'
     git remote add origin 'https://github.com/6076446993/example.git'
-    Set-Content -LiteralPath 'a.txt' -Value 'old' -NoNewline
+    Set-Content -LiteralPath 'a.txt' -Value 'old'
     Set-Content -LiteralPath '.env' -Value 'SHOULD_NOT_LEAVE_CONTEXT' -NoNewline
     git add a.txt .env
     git commit -qm 'fixture'
@@ -33,7 +33,7 @@ try {
 
     function Invoke-NexusCodingProposal {
         param([string]$TaskDescription,[string]$TaskReference,[string]$LineageReference,[string]$RepositoryReference,[string]$TargetVersion)
-        Set-Content -LiteralPath 'a.txt' -Value 'new' -NoNewline
+        Set-Content -LiteralPath 'a.txt' -Value 'new'
         try {
             $diff = ((& git diff --binary -- a.txt) -join [Environment]::NewLine) + [Environment]::NewLine
             if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($diff)) { throw 'Fixture failed to generate a Git-applicable proposal diff.' }
