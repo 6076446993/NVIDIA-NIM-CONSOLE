@@ -35,7 +35,6 @@ try {
         param([string]$TaskDescription,[string]$TaskReference,[string]$LineageReference,[string]$RepositoryReference,[string]$TargetVersion)
         $diffLines = @(
             'diff --git a/a.txt b/a.txt',
-            'index 3367afd..3e75765 100644',
             '--- a/a.txt',
             '+++ b/a.txt',
             '@@ -1 +1 @@',
