@@ -26,7 +26,7 @@ jobs:
         run: |
           $tokens = $null
           $errors = $null
-          foreach ($script in @('./NimConsole.ps1', './NexusCodingWorkflow.ps1', './tests/NexusCodingWorkflowRegression.ps1')) {
+          foreach ($script in @('./NimConsole.ps1', './NexusCodingWorkflow.ps1', './NIMEfficiency.ps1', './tests/NexusCodingWorkflowRegression.ps1', './tests/NimEfficiencyRegression.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors) | Out-Null
@@ -38,6 +38,10 @@ jobs:
       - name: Run coding workflow lineage regression
         shell: pwsh
         run: ./tests/NexusCodingWorkflowRegression.ps1
+
+      - name: Run agentic usage efficiency regression
+        shell: pwsh
+        run: ./tests/NimEfficiencyRegression.ps1
 
       - name: Verify Python helper and requirements
         shell: pwsh
