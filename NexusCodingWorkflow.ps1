@@ -1,5 +1,10 @@
 Set-StrictMode -Version Latest
 
+$nimEfficiencyModule = Join-Path $PSScriptRoot 'NIMEfficiency.ps1'
+if (Test-Path -LiteralPath $nimEfficiencyModule) {
+    . $nimEfficiencyModule
+}
+
 function Get-NexusStringSha256 {
     param([Parameter(Mandatory=$true)][string]$Value)
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
@@ -122,6 +127,15 @@ function Invoke-NexusCodingTask {
 
     $repository = Get-NexusRepositoryReference
     $targetVersion = (git rev-parse HEAD).Trim()
+    $branch = (git branch --show-current 2>$null)
+    $executionFingerprint = $null
+    if (Get-Command New-NimExecutionFingerprint -ErrorAction SilentlyContinue) {
+        $executionFingerprint = New-NimExecutionFingerprint -Project 'NVIDIA NIM' -OperationClass 'repository-implementation' -Objective $TaskDescription -Repository $repository -Branch $branch -Head $targetVersion -Trigger 'interactive-code'
+        $duplicate = Test-NimDuplicateExecution -Fingerprint $executionFingerprint
+        if ($duplicate.Duplicate) {
+            throw ('Duplicate execution suppressed for unchanged task/state. Existing state: ' + $duplicate.State)
+        }
+    }
     $workflowId = 'workflow-' + [guid]::NewGuid().ToString('N')
     $requestId = 'request-' + [guid]::NewGuid().ToString('N')
     $taskId = 'task-' + [guid]::NewGuid().ToString('N')
@@ -147,6 +161,7 @@ function Invoke-NexusCodingTask {
         }
         repositoryReference = $repository
         targetVersion = $targetVersion
+        executionFingerprint = $executionFingerprint
         workflowState = 'REQUESTED'
         completionStatus = 'UNVERIFIED'
         codingProposal = $null
@@ -154,6 +169,9 @@ function Invoke-NexusCodingTask {
         updatedAt = $now
     }
     $recordFile = Write-NexusWorkflowRecord -Record $record
+    if ($executionFingerprint -and (Get-Command Write-NimCheckpoint -ErrorAction SilentlyContinue)) {
+        Write-NimCheckpoint -Fingerprint $executionFingerprint -State @{ state='REQUESTED'; head=$targetVersion; workflowId=$workflowId; taskId=$taskId; operationClass='repository-implementation' } | Out-Null
+    }
 
     try {
         $response = Invoke-NexusCodingProposal -TaskDescription $TaskDescription -TaskReference $taskId -LineageReference $lineageId -RepositoryReference $repository -TargetVersion $targetVersion
@@ -190,6 +208,10 @@ function Invoke-NexusCodingTask {
         $record.executedAt = (Get-Date).ToUniversalTime().ToString('o')
         $record.updatedAt = $record.executedAt
         $recordFile = Write-NexusWorkflowRecord -Record $record
+        if ($executionFingerprint -and (Get-Command Write-NimCheckpoint -ErrorAction SilentlyContinue)) {
+            Write-NimCheckpoint -Fingerprint $executionFingerprint -State @{ state='EXECUTED'; head=$targetVersion; workflowId=$workflowId; taskId=$taskId; executedDiffSha256=$record.executedDiffSha256; operationClass='repository-implementation' } | Out-Null
+            Write-NimUsageRecord -Project 'NVIDIA NIM' -TaskId $taskId -OperationClass 'repository-implementation' -Outcome 'EXECUTED' -Trigger 'interactive-code' -StartingCheckpoint $targetVersion -EndingCheckpoint $record.executedDiffSha256 -ChangedStateDetected $true -ToolCallCount 1 -VerificationLevel 'UNVERIFIED' | Out-Null
+        }
         return [pscustomobject]@{ record = $record; recordFile = $recordFile }
     } catch {
         $record.workflowState = 'BLOCKED'
@@ -197,6 +219,10 @@ function Invoke-NexusCodingTask {
         $record.blockedReason = $_.Exception.Message
         $record.updatedAt = (Get-Date).ToUniversalTime().ToString('o')
         Write-NexusWorkflowRecord -Record $record | Out-Null
+        if ($executionFingerprint -and (Get-Command Write-NimCheckpoint -ErrorAction SilentlyContinue)) {
+            Write-NimCheckpoint -Fingerprint $executionFingerprint -State @{ state='BLOCKED'; head=$targetVersion; workflowId=$workflowId; taskId=$taskId; blockedReason=$record.blockedReason; operationClass='repository-implementation' } | Out-Null
+            Write-NimUsageRecord -Project 'NVIDIA NIM' -TaskId $taskId -OperationClass 'repository-implementation' -Outcome 'BLOCKED' -Trigger 'interactive-code' -StartingCheckpoint $targetVersion -ChangedStateDetected $false -ToolCallCount 1 -VerificationLevel 'UNVERIFIED' | Out-Null
+        }
         throw
     }
 }
@@ -290,5 +316,9 @@ function Confirm-NexusWorkflowVerification {
     $record.completionStatus = 'VERIFIED'
     $record.updatedAt = (Get-Date).ToUniversalTime().ToString('o')
     $record | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $file.FullName -Encoding UTF8
+    if ($record.executionFingerprint -and (Get-Command Write-NimCheckpoint -ErrorAction SilentlyContinue)) {
+        Write-NimCheckpoint -Fingerprint ([string]$record.executionFingerprint) -State @{ state='VERIFIED'; head=$record.targetVersion; workflowId=$record.workflowId; taskId=$record.taskRequest.taskIdentifier; verificationRunId=$receipt.workflowRunId; operationClass='repository-implementation' } | Out-Null
+        Write-NimUsageRecord -Project 'NVIDIA NIM' -TaskId ([string]$record.taskRequest.taskIdentifier) -OperationClass 'verification' -Outcome 'VERIFIED' -Trigger 'interactive-verify' -StartingCheckpoint ([string]$record.targetVersion) -EndingCheckpoint ([string]$receipt.targetVersion) -ChangedStateDetected $true -ToolCallCount 1 -VerificationLevel 'VERIFIED' | Out-Null
+    }
     return $record
 }
