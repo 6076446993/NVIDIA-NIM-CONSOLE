@@ -18,3 +18,6 @@ These instructions apply to NIM repository work and supplement, rather than repl
 ## Codex compact policy
 
 The owner's 1,998-character cap applies to the compact Codex instruction text, not this repository file. Never overwrite live Codex settings without reading and preserving their exact current contents and validating a lossless merge. Global `~/.codex/AGENTS.md` is user-local and cannot be installed by this repository commit. Verify the effective instruction chain in the actual runtime before claiming that Codex loads it.
+
+## Shared Codex source update (2026-10-17)
+Authoritative full document: https://docs.google.com/document/d/1fDgUEvtrcUs-0F2RA2X6TibMvfU65MFU2LuVVgFYmOU/edit . Section 12 preserves the owner's complete resource-efficiency instructions from Drive file 1guBMJVJiSeArOcB693fhJ2hrlsuznETg. Apply checkpoint reuse, cheap no-change probes, execution deduplication, retry fingerprints, usage attribution and test escalation only where supported by actual code; never treat this governance reference as proof of runtime enforcement. The SharedCodex.ps1 adapter is not yet wired into the normal workflow and private-doc authentication remains a blocker.
