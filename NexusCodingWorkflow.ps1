@@ -130,6 +130,9 @@ function Invoke-NexusCodingTask {
 
     $record = [ordered]@{
         schemaVersion = 1
+        instructionLedgerVersion = 1
+        promptSha256 = Get-NexusStringSha256 $TaskDescription
+        requirements = @([ordered]@{ id = 'original-request'; text = $TaskDescription; status = 'INCOMPLETE'; evidenceReference = $null })
         workflowId = $workflowId
         promptRequest = [ordered]@{
             requestIdentifier = $requestId
@@ -194,6 +197,7 @@ function Invoke-NexusCodingTask {
     } catch {
         $record.workflowState = 'BLOCKED'
         $record.completionStatus = 'UNVERIFIED'
+        if ($record.requirements) { $record.requirements[0].status = 'BLOCKED' }
         $record.blockedReason = $_.Exception.Message
         $record.updatedAt = (Get-Date).ToUniversalTime().ToString('o')
         Write-NexusWorkflowRecord -Record $record | Out-Null
@@ -285,6 +289,19 @@ function Confirm-NexusWorkflowVerification {
     $receipt = Get-CrucibleVerificationReceipt -WorkflowId $record.workflowId -RecordTargetVersion $record.targetVersion -ExpectedDiffSha256 $record.executedDiffSha256
     if ($receipt.repositoryReference -ne $record.repositoryReference) { throw 'Crucible receipt repository does not match the workflow repository.' }
 
+    # Older records remain readable; newer records require original-prompt integrity.
+    if ($record.PSObject.Properties.Name -contains 'promptSha256') {
+        if ((Get-NexusStringSha256 ([string]$record.promptRequest.promptContent)) -ne [string]$record.promptSha256) { throw 'Original prompt changed after workflow creation.' }
+    }
+    if ($record.PSObject.Properties.Name -contains 'requirements') {
+        if (-not $record.requirements -or @($record.requirements).Count -eq 0) { throw 'Missing requirement ledger; cannot verify.' }
+        foreach ($requirement in @($record.requirements)) {
+            if ($requirement.id -ne 'original-request' -and $requirement.status -ne 'VERIFIED') { throw ('Requirement not independently verified: ' + $requirement.id) }
+        }
+        foreach ($requirement in @($record.requirements)) {
+            if ($requirement.id -eq 'original-request') { $requirement.status = 'VERIFIED'; $requirement.evidenceReference = [string]$receipt.workflowId }
+        }
+    }
     $record.verificationReceipt = $receipt
     $record.workflowState = 'VERIFIED'
     $record.completionStatus = 'VERIFIED'
